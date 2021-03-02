@@ -1,4 +1,4 @@
-# ATS-P2: A GARCH Forecasting Model to Predict Electricity Prices
+# ATS-P2: A GARCH Forecasting Model to Predict Day-Ahead Electricity Prices
 
 # Background
 --- Final project for ATS in which electricity price data was collected from the California & Spain market. The purpose of the project was to create the best forecasting
