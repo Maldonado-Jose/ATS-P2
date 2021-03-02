@@ -92,7 +92,7 @@ plot(octoberroll, which = 3, VaR.alpha = 0.05)
 #as.data.frame(octoberroll)
 ```
 
-### GARCH Cali Data for May
+## GARCH Cali Data for May
 ```{r}
 ## Same method as before was used.
 ## ARMA (1,3) was picked so it could handle the spikes at the end of the month better.
