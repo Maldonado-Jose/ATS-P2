@@ -1,0 +1,150 @@
+---
+title: "Using GARCH to Forecast Electricity Prices"
+subtitle: ' By: Jose Maldonado'
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+#Packages used and installed for GARCH forecasting 
+#install.packages("rugarch")
+#install.packages("rmgarch")
+library(rugarch)
+library(rmgarch)
+library(readxl)
+library(fpp2)
+library(tseries)
+library(xts)
+#??rugarch
+#??rmgarch
+```
+
+## Spanish Data
+```{r}
+## Spanish data was obtain from www.omel.es
+## Once the file is read we converted into a time series and multiplied by 10 to also conver it to Euros.
+spanishjune = read.csv("SpanishDataJune.csv", stringsAsFactors = FALSE, header = TRUE)
+spanishjunets = ts(spanishjune[,-1] * 10, frequency = 24)
+spanishoctober = read.csv("SpanishDataOctober.csv", stringsAsFactors = FALSE, header = TRUE)
+octoberts = ts(spanishoctober[,-1] * 10, frequency = 24)
+autoplot(spanishjunets)
+autoplot(octoberts)
+```
+
+## California Data
+```{r}
+## Data was obtain from http://www.energyonline.com/Data/GenericData.aspx?DataId=20&amp;CAISO___Average_Price
+## Taking the price from every five minutes we found the average price per hour and used those values for our hourly price.
+calimay = read.csv("CaliDataMay.csv", stringsAsFactors = FALSE, header = TRUE)
+calimayts = ts(calimay[,-1], frequency = 24)
+calijune = read.csv("CaliDataJune.csv", stringsAsFactors = FALSE, header = TRUE)
+caliunets = ts(calijune[,-1], frequency = 24)
+autoplot(calimayts)
+autoplot(caliunets)
+```
+
+## ARIMA (for comparing)
+```{r}
+## ARIMA(1,0,0)(2,1,2) [24] was chosen as the best model, we can see from the residuals and the test and train set that ARIMA cannot handle the volatility of the data well.
+## Using ARIMA to forecast takes alot of computing power aswell, when compared to GARCH ARIMA does poorly.
+arimasjune = auto.arima(spanishjunets, seasonal = TRUE, stepwise = FALSE, lambda = "auto")
+autoplot(forecast(arimasjune), h = 24)
+arimasjune
+checkresiduals(arimasjune)
+train = subset(spanishjunets, end = 575)
+test = subset(spanishjunets, start = 576)
+sjunetrain = Arima(train, order = c(1,0,0), seasonal = c(2,1,2), lambda = "auto")
+sjunetrain %>% forecast(h = 145) %>% autoplot() + autolayer(test)
+```
+
+## GARCH Spanish Data for June
+```{r}
+## A model is first made from ugarchspec, GARCH (1,3) seems to be best for most of the data sets along with ARMA (1,1).
+sjune1 = ugarchspec(variance.model = list(garchOrder = c(1,3)),mean.model = list(armaOrder = c(1,1)), distribution.model = "norm")
+## ugarchfit gives us the information we need as far as parameters, and we are able to use the different test and the information criteria to compare different models to pick the best GARCH model for the data. From this GARCH (1,3) was chosen.
+sjunegarch1 = ugarchfit(spec = sjune1, data = spanishjunets)
+sjunegarch1
+## ugarchboot lets us forecast.
+sjunepredict = ugarchboot(sjunegarch1, n.ahead = 24, method = c("Partial","Full")[1])
+plot(sjunepredict, which = 2)
+sjunepredict
+## ugarchroll is used as a train and test set to see how it handles forecasting.
+sjuneroll = ugarchroll(sjune1, spanishjunets,n.start = 576, refit.every = 24, refit.window = "moving", solver = "hybrid", calculate.VaR = TRUE, VaR.alpha = 0.05, keep.coef = TRUE)
+sjuneroll
+plot(sjuneroll, which = 3, VaR.alpha = 0.05)
+# as.data.frame() is used to look into the variable, letting us see all values. Remove "#" to run it and see the real values vs the forecasted values. By taking higher values and dividing by the smallest value subtracting that from 1 and multiplying we are able to see our error.
+as.data.frame(sjuneroll)
+```
+
+## GARCH Spanish Data for October
+```{r}
+## Same methond as above was used. We used ugarchfit to see which GARCH model would work best, from that we also obtained our parameters.
+october1 = ugarchspec(variance.model = list(garchOrder = c(1,3)),mean.model = list(armaOrder = c(1,1)), distribution.model = "norm")
+octobergarch1 = ugarchfit(spec = october1, data = octoberts)
+octobergarch1
+octoberpredict = ugarchboot(octobergarch1, n.ahead = 24, method = c("Partial","Full")[1])
+plot(octoberpredict, which = 3)
+octoberpredict
+octoberroll = ugarchroll(october1, octoberts,n.start = 504, refit.every = 24, refit.window = "moving", solver = "hybrid", calculate.VaR = TRUE, VaR.alpha = 0.05, keep.coef = TRUE)
+octoberroll
+plot(octoberroll, which = 3, VaR.alpha = 0.05)
+#as.data.frame(octoberroll)
+```
+
+### GARCH Cali Data for May
+```{r}
+## Same method as before was used.
+## ARMA (1,3) was picked so it could handle the spikes at the end of the month better.
+may1 = ugarchspec(variance.model = list(garchOrder = c(1,3)),mean.model = list(armaOrder = c(1,3)), distribution.model = "norm")
+maygarch1 = ugarchfit(spec = may1, data = calimayts)
+maygarch1
+maypredict = ugarchboot(maygarch1, n.ahead = 24, method = c("Partial","Full")[1])
+plot(maypredict, which = 2)
+maypredict
+mayroll = ugarchroll(may1, calimayts,n.start = 456, refit.every = 24, refit.window = "moving", solver = "hybrid", calculate.VaR = TRUE, VaR.alpha = 0.05, keep.coef = TRUE)
+mayroll
+plot(mayroll, which = 3, VaR.alpha = 0.05)
+#as.data.frame(mayroll)
+```
+
+## Garch Cali Data for June
+```{r}
+cajune1 = ugarchspec(variance.model = list(garchOrder = c(1,3)),mean.model = list(armaOrder = c(1,1)), distribution.model = "norm")
+cajunegarch1 = ugarchfit(spec = cajune1, data = caliunets)
+cajunegarch1
+cajunepredict = ugarchboot(cajunegarch1, n.ahead = 24, method = c("Partial","Full")[1])
+plot(cajunepredict, which = 2)
+cajunepredict
+cajuneroll = ugarchroll(cajune1, caliunets,n.start = 576, refit.every = 24, refit.window = "moving", solver = "hybrid", calculate.VaR = TRUE, VaR.alpha = 0.05, keep.coef = TRUE)
+cajuneroll
+plot(cajuneroll, which = 3, VaR.alpha = 0.05)
+#as.data.frame(cajuneroll)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
